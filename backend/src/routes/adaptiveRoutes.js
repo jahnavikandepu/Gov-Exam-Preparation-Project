@@ -1,0 +1,11 @@
+import { Router } from 'express';
+import { AdaptiveController } from '../controllers/adaptiveController.js';
+import { authenticateJWT } from '../middleware/authMiddleware.js';
+const router = Router();
+router.get('/next-session', authenticateJWT, AdaptiveController.getNextSession);
+router.get('/next-practice', authenticateJWT, AdaptiveController.getNextSession);
+router.post('/generate-session', authenticateJWT, AdaptiveController.generateSession);
+router.get('/weaknesses', authenticateJWT, AdaptiveController.getWeaknessProfile);
+router.get('/weak-topics', authenticateJWT, AdaptiveController.getWeaknessProfile);
+router.get('/recommendations', authenticateJWT, AdaptiveController.getRecommendations);
+export default router;

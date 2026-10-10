@@ -1,0 +1,14 @@
+import { Router } from 'express';
+import { TestController } from '../controllers/testController.js';
+import { authenticateJWT } from '../middleware/authMiddleware.js';
+const router = Router();
+router.get('/', TestController.getTests);
+router.get('/attempts/:attemptId', authenticateJWT, TestController.getAttemptState);
+router.post('/attempts/:attemptId/answer', authenticateJWT, TestController.autosaveAnswer);
+router.post('/attempts/:attemptId/submit-section', authenticateJWT, TestController.submitSection);
+router.post('/attempts/:attemptId/tab-switch', authenticateJWT, TestController.recordTabSwitch);
+router.get('/:id', TestController.getTestById);
+router.post('/:id/start', authenticateJWT, TestController.startTest);
+router.post('/:id/submit-section', authenticateJWT, TestController.submitSection);
+router.post('/:id/submit', authenticateJWT, TestController.submitTest);
+export default router;

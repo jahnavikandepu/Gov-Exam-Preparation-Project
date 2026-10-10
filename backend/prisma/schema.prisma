@@ -1,0 +1,458 @@
+// Prisma Schema for GovPrep Adaptive Exam Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String                    @id @default(uuid())
+  name            String
+  email           String                    @unique
+  password        String
+  role            String                    @default("USER") // USER, ADMIN
+  targetExam      String                    @default("RRB NTPC")
+  avatarUrl       String?
+  phone           String?
+  category        String?                   @default("General") // General, OBC, SC, ST, EWS
+  state           String?                   // State / Domicile
+  qualification   String?                   // Educational Qualification
+  targetYear      String?                   @default("2026")
+  gender          String?                   // Male, Female, Other
+  dob             String?                   // Date of Birth (YYYY-MM-DD)
+  preferredLanguage String?                 @default("English") // English, Hindi, Telugu
+  status          String                    @default("Active") // Active, Inactive, Disabled
+  joinedDate      String?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  // Relationships
+  testAttempts    TestAttempt[]
+  topicPerformances StudentTopicPerformance[]
+  weaknessProfile WeaknessProfile?
+  practiceSessions PracticeSession[]
+  aiAnalyses      AIAnalysis[]
+  recommendations Recommendation[]
+  questionHistories QuestionHistory[]
+}
+
+model Exam {
+  id                   String    @id @default(uuid())
+  code                 String?   @unique // e.g. "APPSC_FBO_ABO", "RRB_NTPC", "RRB_JE"
+  slug                 String    @unique
+  name                 String
+  fullName             String
+  category             String    // Railways, Banking, State PSC, SSC, Defense
+  shortDescription     String
+  fullDescription      String
+  durationMinutes      Int       @default(90)
+  totalQuestions       Int       @default(100)
+  totalMarks           Int       @default(100)
+  negativeMarking      String    @default("0.33")
+  badge                String?
+  status               String    @default("Active") // Active, Draft, Archived
+  pattern              String?   // JSON string of exam pattern
+  eligibility          String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  // Relationships
+  stages               ExamStage[]
+  subjects             Subject[]
+  tests                Test[]
+  questions            Question[]
+  syllabusDocuments    SyllabusDocument[]
+}
+
+model ExamStage {
+  id                      String        @id @default(uuid())
+  examId                  String
+  code                    String        // e.g. "SCREENING_TEST", "CBT_1", "CBT_2", "MAINS"
+  name                    String        // e.g. "Screening Test", "CBT-1", "CBT-2"
+  paperName               String?       // e.g. "Objective Paper", "Preliminary Exam"
+  description             String?
+  durationMinutes         Int           @default(90)
+  scribeDurationMinutes   Int?          @default(120)
+  totalQuestions          Int           @default(100)
+  totalMarks              Int           @default(100)
+  marksPerQuestion        Float         @default(1.0)
+  negativeMarks           Float         @default(0.33)
+  questionType            String        @default("OBJECTIVE_MCQ")
+  language                String        @default("English, Hindi, Telugu")
+  isQualifying            Boolean       @default(false)
+  isMerit                 Boolean       @default(true)
+  isScreening             Boolean       @default(false)
+  separateTimer           Boolean       @default(false)
+  sectionTiming           Boolean       @default(false)
+  hasScribeExtension      Boolean       @default(true)
+  notificationReference   String?       // e.g. "CEN 01/2019", "Notification No. 04/2024"
+  notificationYear        Int?          // e.g. 2024, 2025
+  lastVerifiedAt          DateTime?
+  status                  String        @default("ACTIVE") // ACTIVE, DRAFT, ARCHIVED
+  order                   Int           @default(1)
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  exam                    Exam          @relation(fields: [examId], references: [id], onDelete: Cascade)
+  sections                ExamSection[]
+  tests                   Test[]
+  testAttempts            TestAttempt[]
+
+  @@unique([examId, code])
+}
+
+model ExamSection {
+  id               String     @id @default(uuid())
+  stageId          String
+  subjectId        String?
+  name             String     // e.g. "General Awareness", "General Studies & Mental Ability", "Technical Abilities"
+  code             String?    // e.g. "GA", "MATH", "PART_A"
+  questionCount    Int        @default(30)
+  durationMinutes  Int?       // Optional sectional duration (e.g. 20 for IBPS PO Prelims sections)
+  totalMarks       Float?
+  marksPerQuestion Float      @default(1.0)
+  negativeMarks    Float      @default(0.33)
+  questionType     String     @default("OBJECTIVE_MCQ") // OBJECTIVE_MCQ, DESCRIPTIVE_ESSAY
+  order            Int        @default(1)
+  discipline       String?    // e.g. "Civil", "Electrical", "Mechanical", "Common"
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  stage            ExamStage  @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  subject          Subject?   @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+}
+
+model SyllabusDocument {
+  id            String    @id @default(uuid())
+  examId        String
+  examSlug      String
+  fileName      String
+  filePath      String    // Relative path within SYLLABUS_DIR, e.g. "rrb-ntpc/rrb-ntpc-syllabus.pdf"
+  documentType  String    @default("SYLLABUS") // SYLLABUS, NOTIFICATION, PREVIOUS_PAPER
+  language      String    @default("English")
+  description   String?
+  fileSizeBytes Int?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  exam          Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+}
+
+model Subject {
+  id                   String        @id @default(uuid())
+  examId               String
+  name                 String
+  slug                 String
+  order                Int           @default(1)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  exam                 Exam          @relation(fields: [examId], references: [id], onDelete: Cascade)
+  topics               Topic[]
+  questions            Question[]
+  examSections         ExamSection[]
+  tests                Test[]
+}
+
+model Topic {
+  id                   String    @id @default(uuid())
+  subjectId            String
+  name                 String
+  slug                 String
+  order                Int       @default(1)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  subject              Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  questions            Question[]
+  topicPerformances    StudentTopicPerformance[]
+  tests                Test[]
+}
+
+model Question {
+  id                   String    @id @default(uuid())
+  examId               String
+  subjectId            String
+  topicId              String
+  questionText         String
+  questionType         String    @default("OBJECTIVE_MCQ") // OBJECTIVE_MCQ, DESCRIPTIVE_ESSAY
+  options              String    // JSON string: [{ id: "A", text: "..." }, ...]
+  correctOption        String?   // A, B, C, D (or null for descriptive essays)
+  explanation          String
+  difficulty           String    @default("MEDIUM") // EASY, MEDIUM, HARD
+  subtopic             String?
+  year                 Int?
+  status               String    @default("PUBLISHED") // DRAFT, APPROVED, PUBLISHED, REJECTED
+  source               String?   @default("GovPrep Expert Team")
+  generationModel      String?
+  generationPromptVersion String?
+  questionHash         String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  exam                 Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  subject              Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topic                Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  
+  testQuestions        TestQuestion[]
+  answers              Answer[]
+  practiceSessionQuestions PracticeSessionQuestion[]
+  questionHistories    QuestionHistory[]
+
+  @@index([questionHash])
+  @@index([topicId, difficulty])
+}
+
+model QuestionHistory {
+  id               String      @id @default(uuid())
+  userId           String
+  questionId       String
+  testAttemptId    String?
+  attemptId        String?
+  testId           String?
+  examId           String?
+  stageId          String?
+  subjectId        String?
+  topicId          String?
+  selectedOption   String?     // A, B, C, D, null
+  isCorrect        Boolean     @default(false)
+  timeSpentSeconds Int         @default(0)
+  shownAt          DateTime    @default(now())
+  createdAt        DateTime    @default(now())
+
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question         Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, examId, stageId])
+  @@index([userId, topicId])
+  @@index([userId, testId])
+  @@index([userId, questionId])
+  @@index([userId, isCorrect])
+}
+
+model Test {
+  id                         String         @id @default(uuid())
+  examId                     String
+  stageId                    String?
+  subjectId                  String?
+  topicId                    String?
+  title                      String
+  slug                       String         @unique
+  type                       String         @default("FULL_MOCK") // FULL_MOCK, SECTIONAL, TOPIC_TEST
+  difficulty                 String         @default("MEDIUM") // EASY, MEDIUM, HARD
+  totalQuestions             Int            @default(100)
+  durationMinutes            Int            @default(90)
+  totalMarks                 Int            @default(100)
+  negativeMarkingPerQuestion Float          @default(0.33)
+  marksPerCorrect            Float          @default(1.0)
+  status                     String         @default("ACTIVE") // ACTIVE, DRAFT, ARCHIVED
+  instructions               String?        // JSON array string
+  createdAt                  DateTime       @default(now())
+  updatedAt                  DateTime       @updatedAt
+
+  exam                       Exam           @relation(fields: [examId], references: [id], onDelete: Cascade)
+  stage                      ExamStage?     @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  subject                    Subject?       @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topic                      Topic?         @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  testQuestions              TestQuestion[]
+  attempts                   TestAttempt[]
+
+  @@index([topicId])
+  @@index([subjectId])
+}
+
+model TestQuestion {
+  id          String    @id @default(uuid())
+  testId      String
+  questionId  String
+  order       Int       @default(1)
+  sectionName String?
+
+  test        Test      @relation(fields: [testId], references: [id], onDelete: Cascade)
+  question    Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([testId, questionId])
+}
+
+model TestAttempt {
+  id                  String       @id @default(uuid())
+  userId              String
+  testId              String?
+  stageId             String?
+  subjectId           String?
+  topicId             String?
+  practiceSessionId   String?
+  attemptNumber       Int          @default(1)
+  testTitle           String
+  examName            String
+  stageName           String?
+  subjectName         String?
+  topicName           String?
+  isCompleted         Boolean      @default(false)
+  status              String       @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED, TIMED_OUT, EXPIRED
+  startTime           DateTime     @default(now())
+  startedAt           DateTime     @default(now())
+  expiresAt           DateTime?
+  currentSectionId    String?
+  currentSectionIndex Int          @default(0)
+  sectionExpiresAt    DateTime?
+  sectionTimingData   String?      // JSON string tracking section timers & submission state
+  endTime             DateTime?
+  submittedAt         DateTime?
+  durationSeconds     Int          @default(0)
+  totalQuestions      Int          @default(0)
+  attemptedQuestions  Int          @default(0)
+  correctAnswers      Int          @default(0)
+  incorrectAnswers    Int          @default(0)
+  skippedQuestions    Int          @default(0)
+  score               Float        @default(0.0)
+  totalMarks          Float        @default(0.0)
+  accuracy            Float        @default(0.0)
+  subjectBreakdown    String?   // JSON string of section/subject results
+  topicBreakdown      String?   // JSON string of topic-level metrics
+  difficultyBreakdown String?   // JSON string of easy/medium/hard accuracy
+  tabSwitchCount      Int          @default(0)
+  autoSubmitReason    String?      // MANUAL, TIME_EXPIRED, TAB_SWITCH
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  test                Test?        @relation(fields: [testId], references: [id], onDelete: SetNull)
+  stage               ExamStage?   @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  answers             Answer[]
+  aiAnalyses          AIAnalysis[]
+  recommendations     Recommendation[]
+
+  @@index([userId, testId, attemptNumber])
+}
+
+model Answer {
+  id               String      @id @default(uuid())
+  attemptId        String
+  questionId       String
+  selectedOption   String?     // A, B, C, D, null
+  textAnswer       String?     // Written response for descriptive essay
+  evaluationNotes  String?     // Transparent rubric evaluation feedback
+  aiScore          Float?      // AI-estimated score for descriptive essay
+  status           String      @default("NOT_VISITED") // ANSWERED, SKIPPED, MARKED_FOR_REVIEW, ANSWERED_AND_MARKED, NOT_VISITED
+  isCorrect        Boolean     @default(false)
+  timeSpentSeconds Int         @default(0)
+  createdAt        DateTime    @default(now())
+
+  attempt          TestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question         Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+}
+
+model StudentTopicPerformance {
+  id                 String    @id @default(uuid())
+  userId             String
+  topicId            String
+  subjectId          String
+  examId             String
+  questionsAttempted Int       @default(0)
+  correctAnswers     Int       @default(0)
+  incorrectAnswers   Int       @default(0)
+  skippedCount       Int       @default(0)
+  accuracy           Float     @default(0.0)
+  recentAccuracy     Float     @default(0.0)
+  avgTimeSeconds     Float     @default(0.0)
+  trend              String    @default("NEEDS_ATTENTION") // WEAK, NEEDS_ATTENTION, IMPROVING, STRONG, REVISION_NEEDED
+  weaknessScore      Float     @default(50.0) // 0 (best) to 100 (most weak)
+  lastPracticedAt    DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic              Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+}
+
+model WeaknessProfile {
+  id                    String    @id @default(uuid())
+  userId                String    @unique
+  overallWeaknessScore  Float     @default(50.0)
+  weakTopicsCount       Int       @default(0)
+  improvingTopicsCount  Int       @default(0)
+  strongTopicsCount     Int       @default(0)
+  priorityTopics        String?   // JSON array of topic IDs or names
+  lastEvaluatedAt       DateTime  @default(now())
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PracticeSession {
+  id                     String    @id @default(uuid())
+  userId                 String
+  title                  String
+  subjectName            String?
+  targetTopics           String    // JSON array of topic names / IDs
+  difficulty             String    @default("MEDIUM")
+  questionCount          Int       @default(15)
+  estimatedMinutes       Int       @default(15)
+  reason                 String
+  status                 String    @default("GENERATED") // GENERATED, IN_PROGRESS, COMPLETED
+  generatedFromAttemptId String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questions              PracticeSessionQuestion[]
+}
+
+model PracticeSessionQuestion {
+  id                String          @id @default(uuid())
+  practiceSessionId String
+  questionId        String
+  order             Int             @default(1)
+
+  practiceSession   PracticeSession @relation(fields: [practiceSessionId], references: [id], onDelete: Cascade)
+  question          Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([practiceSessionId, questionId])
+}
+
+model AIAnalysis {
+  id                       String       @id @default(uuid())
+  userId                   String
+  attemptId                String?
+  summary                  String
+  weakTopics               String       // JSON array
+  priorityTopics           String       // JSON array
+  recommendedDifficulty    String       @default("MEDIUM")
+  recommendedQuestionCount Int          @default(15)
+  practiceStrategy         String
+  reason                   String
+  rawAIResponse            String?
+  createdAt                DateTime     @default(now())
+
+  user                     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attempt                  TestAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+}
+
+model Recommendation {
+  id                 String       @id @default(uuid())
+  userId             String
+  attemptId          String?
+  title              String
+  subjectName        String
+  topicNames         String       // JSON array of topic names
+  difficulty         String       @default("MEDIUM")
+  questionCount      Int          @default(15)
+  estimatedTime      String       @default("15 mins")
+  reason             String
+  status             String       @default("PENDING") // PENDING, ACCEPTED, DISMISSED
+  practiceSessionId  String?
+  createdAt          DateTime     @default(now())
+
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attempt            TestAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+}

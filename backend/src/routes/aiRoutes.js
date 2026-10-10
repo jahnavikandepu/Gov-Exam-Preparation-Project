@@ -1,0 +1,10 @@
+import { Router } from 'express';
+import { AIController } from '../controllers/aiController.js';
+import { authenticateJWT } from '../middleware/authMiddleware.js';
+const router = Router();
+router.get('/analysis', authenticateJWT, AIController.getAnalysis);
+router.get('/analysis/:attemptId', authenticateJWT, AIController.getAnalysis);
+router.get('/history', authenticateJWT, AIController.getHistory);
+router.post('/analyze-performance', authenticateJWT, AIController.triggerAnalysis);
+router.post('/generate-questions', authenticateJWT, AIController.generateQuestions);
+export default router;

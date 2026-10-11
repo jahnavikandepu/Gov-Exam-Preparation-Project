@@ -401,7 +401,7 @@ export const ExamDetailsPage = () => {
                           </Button>
                         </Link>
                       ) : (
-                        <Link to={`/tests/${stageTest?.slug || stageTest?.id || 'rrb-ntpc-cbt1-mock-01'}/instructions`}>
+                        <Link to={`/tests/${stageTest?.slug || stageTest?.id || 'rrb-ntpc-cbt-1-mock-01'}/instructions`}>
                           <Button size="lg" variant="primary" rightIcon={<Zap className="h-4 w-4 fill-current" />}>
                             Start {stage.name} Mock
                           </Button>

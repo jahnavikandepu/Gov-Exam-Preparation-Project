@@ -40,6 +40,7 @@ export const MockTestPage = () => {
   const [cursorWarningSeconds, setCursorWarningSeconds] = useState(0);
   const [autoSubmitMessage, setAutoSubmitMessage] = useState(null);
   const [sectionNotification, setSectionNotification] = useState(null);
+  const [startError, setStartError] = useState(null);
 
   const isSubmittingRef = useRef(false);
   const tabSwitchingRef = useRef(false);
@@ -115,21 +116,33 @@ export const MockTestPage = () => {
           setExpiresAt(data.expiresAt || null);
           setSectionExpiresAt(data.sectionExpiresAt || null);
           setServerTime(data.serverTime || null);
-          setQuestions(data.questions);
+          const rawQuestions = data.questions || [];
+          const testSections = data.test?.sections || [];
+
+          // If test has only 1 section (e.g. topic test or single-section test), normalize all questions to that section
+          const normalizedQuestions = rawQuestions.map((q) => {
+            if (testSections.length === 1) {
+              return { ...q, sectionId: testSections[0].id, sectionName: testSections[0].name };
+            }
+            return q;
+          });
+
+          setQuestions(normalizedQuestions);
           setTabSwitchCount(data.tabSwitchCount || 0);
 
           // Store active attempt ID in session storage for refresh resilience
           sessionStorage.setItem(`active_attempt_${id}`, data.attemptId);
 
           // Initialize sections
-          if (data.currentSectionId) {
+          if (data.currentSectionId && testSections.some((s) => s.id === data.currentSectionId)) {
             setActiveSectionId(data.currentSectionId);
-            setActiveSectionIndex(data.currentSectionIndex ?? 0);
-          } else if (data.test.sections && data.test.sections.length > 0) {
-            setActiveSectionId(data.test.sections[0].id);
+            const foundIdx = testSections.findIndex((s) => s.id === data.currentSectionId);
+            setActiveSectionIndex(foundIdx >= 0 ? foundIdx : (data.currentSectionIndex ?? 0));
+          } else if (testSections.length > 0) {
+            setActiveSectionId(testSections[0].id);
             setActiveSectionIndex(0);
-          } else if (data.questions.length > 0) {
-            setActiveSectionId(data.questions[0].sectionId);
+          } else if (normalizedQuestions.length > 0) {
+            setActiveSectionId(normalizedQuestions[0].sectionId);
             setActiveSectionIndex(0);
           }
 
@@ -186,6 +199,7 @@ export const MockTestPage = () => {
         setLoading(false);
       }).catch((err) => {
         console.error('Failed to start test session:', err);
+        setStartError(err.message || 'Unable to prepare complete test.');
         setLoading(false);
       });
     }
@@ -303,8 +317,14 @@ export const MockTestPage = () => {
     : { selectedOption: null, textAnswer: '', status: 'not-visited', isMarkedForReview: false, timeSpentSeconds: 0 };
 
   // Current active section metadata
+  const isSectionTiming = Boolean(
+    test?.sectionTiming &&
+    test?.sections &&
+    test.sections.length > 1 &&
+    test?.type !== 'TOPIC_TEST' &&
+    !test?.topicId
+  );
   const currentSection = test?.sections ? test.sections[activeSectionIndex] : null;
-  const isSectionTiming = !!test?.sectionTiming;
 
   // Autosave answer helper (handles both MCQ options and descriptive essay text)
   const triggerAutosave = (qId, opt, status, timeSpent, textAns) => {
@@ -416,7 +436,7 @@ export const MockTestPage = () => {
       const nextQ = questions[nextIndex];
 
       // In sectional timing exams, prevent navigating into other sections
-      if (isSectionTiming && nextQ.sectionId !== activeSectionId) {
+      if (isSectionTiming && activeSectionId && nextQ.sectionId && nextQ.sectionId !== activeSectionId) {
         return;
       }
 
@@ -436,7 +456,14 @@ export const MockTestPage = () => {
       setCurrentQuestionIndex(nextIndex);
       if (nextQ.sectionId) {
         setActiveSectionId(nextQ.sectionId);
+        const nextSecIdx = test?.sections?.findIndex((s) => s.id === nextQ.sectionId);
+        if (nextSecIdx !== undefined && nextSecIdx !== -1) {
+          setActiveSectionIndex(nextSecIdx);
+        }
       }
+    } else if (currentQuestionIndex === questions.length - 1) {
+      // Reached the last question: open the submission review dialog
+      setIsSubmitDialogOpen(true);
     }
   };
 
@@ -448,13 +475,17 @@ export const MockTestPage = () => {
       const prevQ = questions[prevIndex];
 
       // In sectional timing exams, prevent navigating into previous section
-      if (isSectionTiming && prevQ.sectionId !== activeSectionId) {
+      if (isSectionTiming && activeSectionId && prevQ.sectionId && prevQ.sectionId !== activeSectionId) {
         return;
       }
 
       setCurrentQuestionIndex(prevIndex);
       if (prevQ.sectionId) {
         setActiveSectionId(prevQ.sectionId);
+        const prevSecIdx = test?.sections?.findIndex((s) => s.id === prevQ.sectionId);
+        if (prevSecIdx !== undefined && prevSecIdx !== -1) {
+          setActiveSectionIndex(prevSecIdx);
+        }
       }
     }
   };
@@ -466,7 +497,7 @@ export const MockTestPage = () => {
       const targetQ = questions[targetIndex];
 
       // In sectional timing exams, candidate cannot jump to a question outside the active section
-      if (isSectionTiming && targetQ.sectionId !== activeSectionId) {
+      if (isSectionTiming && activeSectionId && targetQ.sectionId && targetQ.sectionId !== activeSectionId) {
         return;
       }
 
@@ -486,6 +517,10 @@ export const MockTestPage = () => {
       setCurrentQuestionIndex(targetIndex);
       if (targetQ.sectionId) {
         setActiveSectionId(targetQ.sectionId);
+        const secIdx = test?.sections?.findIndex((s) => s.id === targetQ.sectionId);
+        if (secIdx !== undefined && secIdx !== -1) {
+          setActiveSectionIndex(secIdx);
+        }
       }
     }
   };
@@ -498,6 +533,10 @@ export const MockTestPage = () => {
       return;
     }
     setActiveSectionId(secId);
+    const secIdx = test?.sections?.findIndex((s) => s.id === secId);
+    if (secIdx !== undefined && secIdx !== -1) {
+      setActiveSectionIndex(secIdx);
+    }
     const firstQIndex = questions.findIndex((q) => q.sectionId === secId);
     if (firstQIndex !== -1) {
       handleJumpToQuestion(firstQIndex);
@@ -526,11 +565,18 @@ export const MockTestPage = () => {
       }
       navigate(`/results/${res.attemptId}`);
     } catch (err) {
+      console.error('Error submitting exam:', err);
       setIsSubmitting(false);
-      if (document.fullscreenElement && document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
+      isSubmittingRef.current = false;
+      if (attemptId && !attemptId.startsWith('mock-')) {
+        sessionStorage.removeItem(`active_attempt_${id}`);
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+        navigate(`/results/${attemptId}`);
+      } else {
+        alert(err.message || 'Submission failed. Please check connection and try again.');
       }
-      navigate(`/results/${attemptId || 'att-mock-fallback'}`);
     }
   };
 
@@ -583,12 +629,12 @@ export const MockTestPage = () => {
     return <LoadingState message="Initializing online examination simulator..." fullPage />;
   }
 
-  if (!test || questions.length === 0) {
+  if (startError || !test || questions.length === 0) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-16">
         <EmptyState
-          title="Questions could not be loaded"
-          description="Please check your test configuration or choose another exam."
+          title={startError ? "Exam Setup Notification" : "Questions could not be loaded"}
+          description={startError || "Please check your test configuration or choose another exam."}
           actionText="Back to Test Catalog"
           onAction={() => navigate('/tests')}
         />
@@ -597,12 +643,18 @@ export const MockTestPage = () => {
   }
 
   // Filter palette items for active section if sectionTiming is enabled
-  const paletteItems = questions.map((q, idx) => ({
-    number: idx + 1,
-    questionId: q.id,
-    status: userAnswers[q.id]?.status || 'not-visited',
-    isLocked: isSectionTiming && q.sectionId !== activeSectionId,
-  }));
+  const paletteItems = questions.map((q, idx) => {
+    const isLocked = isSectionTiming && activeSectionId
+      ? Boolean(q.sectionId && q.sectionId !== activeSectionId)
+      : false;
+
+    return {
+      number: idx + 1,
+      questionId: q.id,
+      status: userAnswers[q.id]?.status || 'not-visited',
+      isLocked,
+    };
+  });
 
   const answeredCount = Object.values(userAnswers).filter(
     (a) => a.status === 'answered' || a.status === 'answered-marked'

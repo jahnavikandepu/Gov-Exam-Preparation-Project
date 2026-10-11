@@ -23,6 +23,10 @@ export class ResultController {
                 res.status(404).json({ success: false, message: 'Test attempt not found.' });
                 return;
             }
+            if (attempt.userId !== userId && req.user?.role !== 'ADMIN') {
+                res.status(403).json({ success: false, message: 'Forbidden: You do not have access to this attempt result.' });
+                return;
+            }
             const isTopicTest = attempt.test?.type === 'TOPIC_TEST' || Boolean(attempt.topicId);
             const marksPerCorrect = isTopicTest ? 1.0 : (attempt.test?.marksPerCorrect || attempt.stage?.marksPerQuestion || 1.0);
             const negativePerWrong = isTopicTest ? 0.0 : (attempt.test?.negativeMarkingPerQuestion ?? attempt.stage?.negativeMarks ?? 0.33);
@@ -104,6 +108,7 @@ export class ResultController {
                 attemptId: attempt.id,
                 attemptNumber: attempt.attemptNumber || 1,
                 testId: attempt.testId || 'custom-practice',
+                testSlug: attempt.test?.slug || attempt.testId || 'custom-practice',
                 stageId: attempt.stageId,
                 stageName: attempt.stageName || attempt.stage?.name,
                 testTitle: attempt.testTitle,

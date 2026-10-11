@@ -67,38 +67,13 @@ export const testApi = {
           isExpired: false,
         };
       }
+
+      throw new Error(res.data.message || 'Failed to start test session.');
     } catch (err) {
-      console.warn('[testApi.startTest] Backend test session initialization note, falling back to mock dataset:', err.message || err);
+      console.error('[testApi.startTest] Backend test initialization error:', err);
+      const serverMessage = err.response?.data?.message || err.message || 'Failed to prepare complete test.';
+      throw new Error(serverMessage);
     }
-
-    // Fallback for mock tests, unauthenticated session previews, or offline dev
-    const fallbackTest = mockTests.find((t) => t.id === testId || t.examSlug === testId) || mockTests[0];
-    const testQuestions = mockQuestions.filter((q) => q.testId === fallbackTest?.id || q.examName === fallbackTest?.examName);
-    const questionsToUse = testQuestions.length > 0 ? testQuestions : mockQuestions;
-    const durationSeconds = (fallbackTest?.durationMinutes || 90) * 60;
-    const now = new Date();
-
-    return {
-      attemptId: `mock-attempt-${Date.now()}`,
-      attemptNumber: 1,
-      isResumed: false,
-      startedAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + durationSeconds * 1000).toISOString(),
-      serverTime: now.toISOString(),
-      durationSeconds,
-      remainingSeconds: durationSeconds,
-      tabSwitchCount: 0,
-      test: fallbackTest || {
-        id: testId,
-        title: 'Mock Test Simulator',
-        durationMinutes: 90,
-        totalQuestions: questionsToUse.length,
-        negativeMarkingPerQuestion: 0.33,
-        marksPerCorrect: 1,
-        sections: [{ id: 'general', name: 'General', questionsCount: questionsToUse.length }],
-      },
-      questions: questionsToUse,
-    };
   },
 
   autosaveAnswer: async (attemptId, data) => {
@@ -154,12 +129,13 @@ export const testApi = {
         attemptData
       );
       if (res.data.success && res.data.attemptId) {
-        return { attemptId: res.data.attemptId };
+        return { ...res.data, attemptId: res.data.attemptId };
       }
-      return { attemptId: attemptData.attemptId || 'att-mock-fallback' };
+      throw new Error(res.data.message || 'Failed to submit test attempt.');
     } catch (err) {
-      console.warn('Backend submit error, using local fallback attempt ID:', err);
-      return { attemptId: attemptData.attemptId || 'att-rrb-ntpc-01' };
+      console.error('[testApi.submitAttempt] Error submitting test attempt:', err);
+      const serverMessage = err.response?.data?.message || err.message || 'Failed to submit exam.';
+      throw new Error(serverMessage);
     }
   },
 };

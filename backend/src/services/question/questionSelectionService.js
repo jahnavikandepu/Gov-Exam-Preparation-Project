@@ -385,8 +385,8 @@ export class QuestionSelectionService {
             const parsedOptions = typeof q.options === 'string' ? JSON.parse(q.options) : q.options;
             return {
                 id: q.id,
-                sectionId: q.subjectId,
-                sectionName: q.subject?.name || topicRecord.subject.name,
+                sectionId: topicRecord.id,
+                sectionName: topicRecord.name,
                 topicId: q.topicId,
                 topicName: q.topic?.name || topicRecord.name,
                 questionText: q.questionText,

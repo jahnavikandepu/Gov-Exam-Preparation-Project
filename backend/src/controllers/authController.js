@@ -289,6 +289,59 @@ export class AuthController {
             res.status(500).json({ success: false, message: error.message || 'Failed to change password.' });
         }
     }
+    static async forgotPassword(req, res) {
+        try {
+            const { email } = req.body;
+            if (!email) {
+                res.status(400).json({ success: false, message: 'Email address is required.' });
+                return;
+            }
+            const user = await prisma.user.findUnique({
+                where: { email: email.trim().toLowerCase() },
+            });
+            if (!user) {
+                res.status(404).json({ success: false, message: 'No account found with this email address.' });
+                return;
+            }
+            res.status(200).json({
+                success: true,
+                message: 'Account verified. You can now set a new password.',
+                email: user.email,
+            });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message || 'Failed to process request.' });
+        }
+    }
+    static async resetPassword(req, res) {
+        try {
+            const { email, newPassword } = req.body;
+            if (!email || !newPassword) {
+                res.status(400).json({ success: false, message: 'Email and new password are required.' });
+                return;
+            }
+            if (newPassword.length < 6) {
+                res.status(400).json({ success: false, message: 'Password must be at least 6 characters long.' });
+                return;
+            }
+            const user = await prisma.user.findUnique({
+                where: { email: email.trim().toLowerCase() },
+            });
+            if (!user) {
+                res.status(404).json({ success: false, message: 'User not found.' });
+                return;
+            }
+            const hashedPassword = await hashPassword(newPassword);
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { password: hashedPassword },
+            });
+            res.status(200).json({ success: true, message: 'Password has been reset successfully. Please log in.' });
+        }
+        catch (error) {
+            res.status(500).json({ success: false, message: error.message || 'Failed to reset password.' });
+        }
+    }
     static async logout(req, res) {
         res.status(200).json({ success: true, message: 'Logged out successfully.' });
     }

@@ -23,6 +23,6 @@ export const GEMINI_CONFIG = {
         return isGeminiConfigured();
     },
     maxQuestionsPerRequest: parseInt(process.env.GEMINI_MAX_QUESTIONS_PER_BATCH || '10', 10),
-    timeoutMs: parseInt(process.env.GEMINI_TIMEOUT_MS || '12000', 10),
+    timeoutMs: parseInt(process.env.GEMINI_TIMEOUT_MS || '30000', 10),
     maxRetries: parseInt(process.env.GEMINI_MAX_RETRIES || '2', 10),
 };

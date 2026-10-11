@@ -10,11 +10,11 @@ export const HistoryPage = () => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState('tests');
+  const [activeTab, setActiveTab] = useState('all');
 
   useEffect(() => {
     analyticsApi.getHistory().then((data) => {
-      setHistory(data);
+      setHistory(data || []);
       setLoading(false);
     });
   }, []);
@@ -34,7 +34,7 @@ export const HistoryPage = () => {
   const topicTests = history.filter(isTopicTest);
   const examMocks = history.filter((item) => !isTopicTest(item));
 
-  const currentList = activeTab === 'tests' ? topicTests : examMocks;
+  const currentList = activeTab === 'all' ? history : activeTab === 'tests' ? topicTests : examMocks;
 
   const filteredItems = currentList.filter((item) => {
     const searchLower = searchTerm.toLowerCase();
@@ -60,28 +60,27 @@ export const HistoryPage = () => {
         </p>
       </div>
 
-      {/* Main Tab Switcher: Topic Tests vs Exam Mocks */}
-      <div className="flex border-b border-slate-200 gap-4 sm:gap-8">
+      {/* Main Tab Switcher: All Attempts vs Topic Tests vs Exam Mocks */}
+      <div className="flex border-b border-slate-200 gap-4 sm:gap-8 overflow-x-auto">
         <button
-          onClick={() => setActiveTab('tests')}
-          className={`pb-3.5 text-base font-bold flex items-center gap-2 border-b-2 cursor-pointer transition-colors ${
-            activeTab === 'tests'
+          onClick={() => setActiveTab('all')}
+          className={`pb-3.5 text-base font-bold flex items-center gap-2 border-b-2 cursor-pointer transition-colors whitespace-nowrap ${
+            activeTab === 'all'
               ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
-          <BookOpen className="h-5 w-5" />
-          <span>Topic Practice Tests</span>
+          <span>All Completed Attempts</span>
           <span className={`text-xs px-2 py-0.5 rounded-full font-extrabold ${
-            activeTab === 'tests' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-600'
+            activeTab === 'all' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-600'
           }`}>
-            {topicTests.length}
+            {history.length}
           </span>
         </button>
 
         <button
           onClick={() => setActiveTab('exams')}
-          className={`pb-3.5 text-base font-bold flex items-center gap-2 border-b-2 cursor-pointer transition-colors ${
+          className={`pb-3.5 text-base font-bold flex items-center gap-2 border-b-2 cursor-pointer transition-colors whitespace-nowrap ${
             activeTab === 'exams'
               ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -93,6 +92,23 @@ export const HistoryPage = () => {
             activeTab === 'exams' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-600'
           }`}>
             {examMocks.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('tests')}
+          className={`pb-3.5 text-base font-bold flex items-center gap-2 border-b-2 cursor-pointer transition-colors whitespace-nowrap ${
+            activeTab === 'tests'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <BookOpen className="h-5 w-5" />
+          <span>Topic Practice Tests</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-extrabold ${
+            activeTab === 'tests' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {topicTests.length}
           </span>
         </button>
       </div>
@@ -195,14 +211,16 @@ export const HistoryPage = () => {
         </div>
       ) : currentList.length === 0 ? (
         <EmptyState
-          title={activeTab === 'tests' ? 'No Topic Tests Attempted Yet' : 'No Exam Mocks Attempted Yet'}
+          title={activeTab === 'all' ? 'No Completed Attempts Yet' : activeTab === 'tests' ? 'No Topic Tests Attempted Yet' : 'No Exam Mocks Attempted Yet'}
           description={
-            activeTab === 'tests'
-              ? 'Practice individual syllabus topics with dedicated 50-question tests.'
-              : 'Take full-length exam simulation mock tests to benchmark your overall readiness.'
+            activeTab === 'all'
+              ? 'Start a full mock exam or topic practice test to track your attempts and scorecards here.'
+              : activeTab === 'tests'
+                ? 'Practice individual syllabus topics with dedicated 50-question tests.'
+                : 'Take full-length exam simulation mock tests to benchmark your overall readiness.'
           }
-          actionText={activeTab === 'tests' ? 'Explore Topic Tests' : 'Explore Exams'}
-          onAction={() => window.location.assign(activeTab === 'tests' ? '/tests' : '/exams')}
+          actionText={activeTab === 'all' ? 'Browse Tests & Exams' : activeTab === 'tests' ? 'Explore Topic Tests' : 'Explore Exams'}
+          onAction={() => window.location.assign(activeTab === 'exams' ? '/exams' : '/tests')}
         />
       ) : (
         <EmptyState

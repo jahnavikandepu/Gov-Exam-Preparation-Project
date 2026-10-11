@@ -88,82 +88,106 @@ export class GeminiQuestionService {
         const strictAiOnly = Boolean(params.strictAiOnly);
 
         let lastError = null;
+        const accumulatedQuestions = [];
+        const seenHashes = new Set([...(params.excludedHashes || [])]);
+        const seenTexts = [...(params.excludedQuestions || [])];
 
-        // If Gemini is configured, attempt AI generation
+        // If Gemini is configured, attempt multi-batch AI generation
         if (apiKey && apiKey.length > 5) {
-            const batchSize = Math.min(GEMINI_CONFIG.maxQuestionsPerRequest, count);
-            const prompt = this.buildPrompt({
-                ...params,
-                difficulty: targetDifficulty,
-                questionCount: batchSize,
-            });
+            const maxBatches = Math.min(10, Math.ceil(count / GEMINI_CONFIG.maxQuestionsPerRequest) + 1);
+            let batchIndex = 0;
 
-            const maxRetries = GEMINI_CONFIG.maxRetries;
-            for (let attempt = 0; attempt <= maxRetries; attempt++) {
-                try {
-                    if (attempt > 0) {
-                        // Exponential backoff
-                        await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
-                    }
+            while (accumulatedQuestions.length < count && batchIndex < maxBatches) {
+                batchIndex++;
+                const needed = count - accumulatedQuestions.length;
+                const batchSize = Math.min(GEMINI_CONFIG.maxQuestionsPerRequest, needed);
+                const prompt = this.buildPrompt({
+                    ...params,
+                    difficulty: targetDifficulty,
+                    questionCount: batchSize,
+                    excludedQuestions: seenTexts.slice(-20),
+                });
 
-                    const responseText = await this.callGeminiApi(apiKey, model, prompt, attempt > 0);
-                    const parsedQuestions = this.parseAndSanitizeJson(responseText);
-                    const validatedQuestions = this.validateAndFilterQuestions(
-                        parsedQuestions,
-                        params.excludedQuestions || [],
-                        params.excludedHashes || new Set(),
-                        targetDifficulty,
-                        params.subjectName,
-                        params.topicName
-                    );
-
-                    if (validatedQuestions.length > 0) {
-                        // If we received some questions from Gemini but need more to reach requested count
-                        if (validatedQuestions.length < count && !strictAiOnly) {
-                            const neededMore = count - validatedQuestions.length;
-                            const currentHashes = new Set([
-                                ...(params.excludedHashes || []),
-                                ...validatedQuestions.map((q) => q.questionHash),
-                            ]);
-                            const fallbackQs = ExamQuestionGenerator.generateBatch({
-                                examName: params.examName,
-                                sectionName: params.subjectName,
-                                subjectName: params.subjectName,
-                                topicName: params.topicName,
-                                difficulty: targetDifficulty,
-                                count: neededMore,
-                                excludedHashes: currentHashes,
-                            });
-                            for (const fb of fallbackQs) {
-                                validatedQuestions.push({
-                                    questionText: fb.questionText,
-                                    options: fb.options,
-                                    correctOption: fb.correctOption,
-                                    explanation: fb.explanation,
-                                    difficulty: fb.difficulty,
-                                    subtopic: fb.subtopic,
-                                    source: 'AI_GENERATED',
-                                    generationModel: 'gemini-calibrated-engine',
-                                    generationPromptVersion: this.PROMPT_VERSION,
-                                    questionHash: fb.questionHash || '',
-                                });
-                            }
+                const maxRetries = GEMINI_CONFIG.maxRetries;
+                let batchGotQuestions = false;
+                for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                    try {
+                        if (attempt > 0) {
+                            await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
                         }
-                        return validatedQuestions.slice(0, count);
+
+                        const responseText = await this.callGeminiApi(apiKey, model, prompt, attempt > 0);
+                        const parsedQuestions = this.parseAndSanitizeJson(responseText);
+                        const validatedQuestions = this.validateAndFilterQuestions(
+                            parsedQuestions,
+                            seenTexts,
+                            seenHashes,
+                            targetDifficulty,
+                            params.subjectName,
+                            params.topicName
+                        );
+
+                        if (validatedQuestions.length > 0) {
+                            for (const vq of validatedQuestions) {
+                                if (accumulatedQuestions.length >= count) break;
+                                accumulatedQuestions.push(vq);
+                                seenHashes.add(vq.questionHash);
+                                seenTexts.push(vq.questionText);
+                            }
+                            batchGotQuestions = true;
+                            break;
+                        }
+                    } catch (err) {
+                        lastError = err;
+                        console.warn(`[GeminiQuestionService] Batch ${batchIndex} attempt ${attempt + 1}/${maxRetries + 1} notice:`, err.message);
                     }
-                } catch (err) {
-                    lastError = err;
-                    console.warn(`[GeminiQuestionService] Attempt ${attempt + 1}/${maxRetries + 1} notice:`, err.message);
                 }
+
+                if (!batchGotQuestions && strictAiOnly) {
+                    break;
+                }
+            }
+
+            if (accumulatedQuestions.length >= count) {
+                return accumulatedQuestions.slice(0, count);
             }
         }
 
-        if (strictAiOnly) {
-            const message = lastError?.message || (apiKey ? `Gemini API failed to return valid questions for model '${model}'.` : 'GEMINI_API_KEY is not configured.');
+        if (strictAiOnly && accumulatedQuestions.length < count) {
+            const message = lastError?.message || (apiKey ? `Gemini API failed to return required ${count} questions for model '${model}'.` : 'GEMINI_API_KEY is not configured.');
             throw new Error(`AI Question Generation Failed: ${message}`);
         }
 
-        // Calibrated Fallback Generator for exam continuity
+        // If some questions were accumulated from Gemini, top up remaining with calibrated generator
+        if (accumulatedQuestions.length > 0) {
+            const neededMore = count - accumulatedQuestions.length;
+            const fallbackQs = ExamQuestionGenerator.generateBatch({
+                examName: params.examName,
+                sectionName: params.subjectName,
+                subjectName: params.subjectName,
+                topicName: params.topicName,
+                difficulty: targetDifficulty,
+                count: neededMore,
+                excludedHashes: seenHashes,
+            });
+            for (const fb of fallbackQs) {
+                accumulatedQuestions.push({
+                    questionText: fb.questionText,
+                    options: fb.options,
+                    correctOption: fb.correctOption,
+                    explanation: fb.explanation,
+                    difficulty: fb.difficulty,
+                    subtopic: fb.subtopic,
+                    source: 'AI_GENERATED',
+                    generationModel: 'gemini-calibrated-engine',
+                    generationPromptVersion: this.PROMPT_VERSION,
+                    questionHash: fb.questionHash || '',
+                });
+            }
+            return accumulatedQuestions.slice(0, count);
+        }
+
+        // Calibrated Fallback Generator if Gemini is not reachable
         console.log(`[GeminiQuestionService] Utilizing Calibrated Exam Engine for ${params.subjectName} (${count} Qs requested)...`);
         const fallbackResults = ExamQuestionGenerator.generateBatch({
             examName: params.examName,

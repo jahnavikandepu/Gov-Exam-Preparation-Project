@@ -103,25 +103,38 @@ export const LoginPage = () => {
               required
             />
 
-            <Input
-              label="Password"
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              leftIcon={<Lock className="h-5 w-5" />}
-              rightIcon={
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="cursor-pointer hover:text-slate-700"
-                  tabIndex={-1}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="login-password" className="block text-sm font-semibold text-slate-700">
+                  Password
+                </label>
+                <Link
+                  to="/forgot-password"
+                  className="text-xs sm:text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline"
                 >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              }
-              required
-            />
+                  Forgot password?
+                </Link>
+              </div>
+              <Input
+                id="login-password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                leftIcon={<Lock className="h-5 w-5" />}
+                rightIcon={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="cursor-pointer hover:text-slate-700"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                }
+                required
+              />
+            </div>
 
             <Button
               type="submit"

@@ -117,7 +117,7 @@ export class TestController {
     static async getTestById(req, res) {
         try {
             const { id } = req.params;
-            const test = await prisma.test.findFirst({
+            let test = await prisma.test.findFirst({
                 where: {
                     OR: [{ id }, { slug: id }],
                 },
@@ -140,6 +140,24 @@ export class TestController {
                     },
                 },
             });
+            if (!test) {
+                const normId = id.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const allTests = await prisma.test.findMany({
+                    include: {
+                        exam: true,
+                        subject: true,
+                        topic: { include: { subject: true } },
+                        stage: { include: { sections: { orderBy: { order: 'asc' } } } },
+                        testQuestions: { include: { question: { include: { subject: true, topic: true } } }, orderBy: { order: 'asc' } },
+                    },
+                });
+                test = allTests.find(
+                    (t) =>
+                        t.id.toLowerCase().replace(/[^a-z0-9]/g, '') === normId ||
+                        (t.slug && t.slug.toLowerCase().replace(/[^a-z0-9]/g, '') === normId) ||
+                        (t.exam && t.exam.slug.toLowerCase().replace(/[^a-z0-9]/g, '') === normId)
+                );
+            }
             if (!test) {
                 res.status(404).json({ success: false, message: 'Test not found.' });
                 return;
@@ -421,6 +439,29 @@ export class TestController {
                 });
             }
             if (!test) {
+                const normId = id.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const allTests = await prisma.test.findMany({
+                    include: {
+                        exam: true,
+                        subject: true,
+                        topic: { include: { subject: true } },
+                        stage: {
+                            include: {
+                                sections: {
+                                    orderBy: { order: 'asc' },
+                                },
+                            },
+                        },
+                    },
+                });
+                test = allTests.find(
+                    (t) =>
+                        t.id.toLowerCase().replace(/[^a-z0-9]/g, '') === normId ||
+                        (t.slug && t.slug.toLowerCase().replace(/[^a-z0-9]/g, '') === normId) ||
+                        (t.exam && t.exam.slug.toLowerCase().replace(/[^a-z0-9]/g, '') === normId)
+                );
+            }
+            if (!test) {
                 res.status(404).json({ success: false, message: 'Test not found.' });
                 return;
             }
@@ -570,18 +611,39 @@ export class TestController {
 
                         const resumedQuestions = existingAttempt.answers.map((ans) => {
                             const q = ans.question;
+                            let resolvedSectionId = q.subjectId;
+                            let resolvedSectionName = q.subject?.name || 'General';
+
+                            if (isTopicTest) {
+                                resolvedSectionId = test.topicId || q.topicId || 'sec-topic';
+                                resolvedSectionName = test.topic?.name || 'Topic Test';
+                            } else if (test.stage?.sections && test.stage.sections.length > 0) {
+                                const matchedSec = test.stage.sections.find((s) =>
+                                    s.subjectId === q.subjectId ||
+                                    s.id === q.subjectId ||
+                                    (s.name && q.subject?.name && (
+                                        s.name.toLowerCase().includes(q.subject.name.toLowerCase()) ||
+                                        q.subject.name.toLowerCase().includes(s.name.toLowerCase())
+                                    ))
+                                );
+                                if (matchedSec) {
+                                    resolvedSectionId = matchedSec.id;
+                                    resolvedSectionName = matchedSec.name;
+                                }
+                            }
+
                             return {
                                 id: q.id,
-                                sectionId: q.subjectId,
-                                sectionName: q.subject.name,
+                                sectionId: resolvedSectionId,
+                                sectionName: resolvedSectionName,
                                 topicId: q.topicId,
-                                topicName: q.topic.name,
+                                topicName: q.topic?.name || 'General',
                                 questionText: q.questionText,
                                 questionType: q.questionType || (test.type === 'DESCRIPTIVE' ? 'DESCRIPTIVE_ESSAY' : 'OBJECTIVE_MCQ'),
                                 options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
                                 difficulty: q.difficulty,
-                                examName: test.exam.name,
-                                subject: q.subject.name,
+                                examName: test.exam?.name || 'Exam',
+                                subject: q.subject?.name || 'General',
                                 source: q.source || 'VERIFIED',
                             };
                         });
@@ -646,7 +708,7 @@ export class TestController {
                                 stageId: test.stageId,
                                 stageName: test.stage?.name,
                                 durationMinutes: configuredDurationMinutes,
-                                sectionTiming: test.stage?.sectionTiming || false,
+                                sectionTiming: isSectionTimed,
                                 totalQuestions: resumedQuestions.length,
                                 negativeMarkingPerQuestion: configuredNegativeMarking,
                                 marksPerCorrect: configuredMarksPerCorrect,
@@ -853,7 +915,7 @@ export class TestController {
                     stageId: test.stageId,
                     stageName: test.stage?.name,
                     durationMinutes: configuredDurationMinutes,
-                    sectionTiming: test.stage?.sectionTiming || false,
+                    sectionTiming: isSectionTimed,
                     totalQuestions: questions.length,
                     negativeMarkingPerQuestion: configuredNegativeMarking,
                     marksPerCorrect: configuredMarksPerCorrect,
@@ -1817,36 +1879,60 @@ export class TestController {
                 return;
             }
 
-            let targetAttemptId = attemptId;
+            // 1. Resolve test to get canonical test.id
+            let resolvedTest = await prisma.test.findFirst({
+                where: { OR: [{ id: testId }, { slug: testId }] },
+            });
+            if (!resolvedTest) {
+                const norm = testId.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const allTests = await prisma.test.findMany();
+                resolvedTest = allTests.find((t) => t.id.toLowerCase().replace(/[^a-z0-9]/g, '') === norm || (t.slug && t.slug.toLowerCase().replace(/[^a-z0-9]/g, '') === norm));
+            }
+            const actualTestId = resolvedTest ? resolvedTest.id : testId;
+
+            let targetAttemptId = null;
+
+            // 2. Validate attempt ownership and handle idempotency if already submitted
+            if (attemptId) {
+                const requestedAttempt = await prisma.testAttempt.findUnique({
+                    where: { id: attemptId },
+                });
+                if (requestedAttempt && requestedAttempt.userId === userId) {
+                    if (requestedAttempt.isCompleted) {
+                        return res.status(200).json({
+                            success: true,
+                            message: 'Test already submitted.',
+                            attemptId: requestedAttempt.id,
+                            score: requestedAttempt.score,
+                            totalMarks: requestedAttempt.totalMarks,
+                            accuracy: requestedAttempt.accuracy,
+                            totalQuestions: requestedAttempt.totalQuestions,
+                            correctAnswers: requestedAttempt.correctAnswers,
+                            incorrectAnswers: requestedAttempt.incorrectAnswers,
+                            skippedQuestions: requestedAttempt.skippedQuestions,
+                            autoSubmitReason: requestedAttempt.autoSubmitReason,
+                            status: requestedAttempt.status,
+                            isCompleted: true,
+                        });
+                    }
+                    targetAttemptId = requestedAttempt.id;
+                }
+            }
+
+            // 3. Fallback to active uncompleted attempt for this student and test
             if (!targetAttemptId) {
                 const activeAttempt = await prisma.testAttempt.findFirst({
-                    where: { userId, testId, isCompleted: false },
-                    orderBy: { startTime: 'desc' },
+                    where: {
+                        userId,
+                        testId: actualTestId,
+                        isCompleted: false,
+                    },
+                    orderBy: { startedAt: 'desc' },
                 });
                 if (activeAttempt) {
                     targetAttemptId = activeAttempt.id;
                 } else {
-                    const completedAttempt = await prisma.testAttempt.findFirst({
-                        where: { userId, testId, isCompleted: true },
-                        orderBy: { startTime: 'desc' },
-                    });
-                    if (completedAttempt) {
-                        res.status(200).json({
-                            success: true,
-                            message: 'Test already submitted.',
-                            attemptId: completedAttempt.id,
-                            score: completedAttempt.score,
-                            accuracy: completedAttempt.accuracy,
-                            totalQuestions: completedAttempt.totalQuestions,
-                            correctAnswers: completedAttempt.correctAnswers,
-                            incorrectAnswers: completedAttempt.incorrectAnswers,
-                            skippedQuestions: completedAttempt.skippedQuestions,
-                            autoSubmitReason: completedAttempt.autoSubmitReason,
-                        });
-                        return;
-                    }
-                    res.status(404).json({ success: false, message: 'Test attempt not found to submit.' });
-                    return;
+                    return res.status(404).json({ success: false, message: 'Active test attempt not found to submit.' });
                 }
             }
 

@@ -27,7 +27,7 @@ export const TestInstructionsPage = () => {
     if (id) {
       testApi.getTestById(id).then((data) => {
         if (data) setTest(data);
-        else testApi.getTestById('rrb-ntpc-cbt1-mock-01').then((fallback) => setTest(fallback || null));
+        else testApi.getTestById('rrb-ntpc-cbt-1-mock-01').then((fallback) => setTest(fallback || null));
         setLoading(false);
       });
     }

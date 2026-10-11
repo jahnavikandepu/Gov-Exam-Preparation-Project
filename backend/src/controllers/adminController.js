@@ -8,10 +8,18 @@ export class AdminController {
      */
     static async getDashboardStats(req, res) {
         try {
-            const [totalUsers, totalQuestions, totalTests, totalExams, totalAttempts, totalTopicAttempts, totalExamAttempts,] = await Promise.all([
+            const [
+                totalUsers,
+                totalQuestions,
+                totalTests,
+                totalExams,
+                totalAttempts,
+                totalCompletedAttempts,
+                totalTopicAttempts,
+                totalExamAttempts,
+            ] = await Promise.all([
                 prisma.user.count({
                     where: {
-                        role: 'USER',
                         status: { notIn: ['Deleted', 'DELETED', 'ARCHIVED'] },
                     },
                 }),
@@ -27,12 +35,12 @@ export class AdminController {
                         status: { notIn: ['Deleted', 'DELETED', 'ARCHIVED'] },
                     },
                 }),
+                prisma.testAttempt.count(),
                 prisma.testAttempt.count({
                     where: { isCompleted: true },
                 }),
                 prisma.testAttempt.count({
                     where: {
-                        isCompleted: true,
                         OR: [
                             { topicId: { not: null } },
                             { test: { type: 'TOPIC_TEST' } },
@@ -41,10 +49,9 @@ export class AdminController {
                 }),
                 prisma.testAttempt.count({
                     where: {
-                        isCompleted: true,
                         OR: [
                             { stageId: { not: null } },
-                            { test: { type: { in: ['FULL_MOCK', 'SECTIONAL'] } } },
+                            { test: { type: { in: ['FULL_MOCK', 'SECTIONAL', 'DESCRIPTIVE'] } } },
                             { AND: [{ topicId: null }, { testId: null }] },
                         ],
                     },
@@ -57,6 +64,7 @@ export class AdminController {
                 totalTests,
                 totalExams,
                 totalAttempts,
+                totalCompletedAttempts,
                 totalTopicAttempts,
                 totalExamAttempts,
             });
@@ -596,7 +604,7 @@ export class AdminController {
     }
     static async syncTests(req, res) {
         try {
-            const { TestSyncService } = await import('../services/test/testSyncService');
+            const { TestSyncService } = await import('../services/test/testSyncService.js');
             await TestSyncService.syncAllTests();
             res.status(200).json({
                 success: true,

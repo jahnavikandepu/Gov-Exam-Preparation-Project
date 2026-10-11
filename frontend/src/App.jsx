@@ -13,6 +13,7 @@ import { ExamDetailsPage } from './pages/public/ExamDetailsPage';
 // Auth Pages
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
+import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
 
 // Student Pages
 import { DashboardPage } from './pages/student/DashboardPage';
@@ -39,6 +40,7 @@ export function App() {
             <Route path="/exams/:slug" element={<ExamDetailsPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
             {/* Protected Student Routes (role === 'USER') */}
             <Route element={<ProtectedRoute />}>

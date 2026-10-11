@@ -88,6 +88,30 @@ export const authApi = {
     }
   },
 
+  forgotPassword: async (email) => {
+    try {
+      const res = await apiClient.post('/auth/forgot-password', { email });
+      return res.data;
+    } catch (err) {
+      return {
+        success: false,
+        error: err.response?.data?.message || 'Failed to verify account.',
+      };
+    }
+  },
+
+  resetPassword: async (email, newPassword) => {
+    try {
+      const res = await apiClient.post('/auth/reset-password', { email, newPassword });
+      return res.data;
+    } catch (err) {
+      return {
+        success: false,
+        error: err.response?.data?.message || 'Failed to reset password.',
+      };
+    }
+  },
+
   logout: async () => {
     try {
       await apiClient.post('/auth/logout');

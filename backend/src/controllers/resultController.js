@@ -59,6 +59,13 @@ export class ResultController {
                 const matchedSec = Object.values(subjectBreakdown).find((s) => s.sectionId === q.subjectId || s.name === q.subject.name) || {};
                 const qMarksPerCorrect = isEssayQ ? (matchedSec.marksPerQuestion || 12.5) : (matchedSec.marksPerQuestion || marksPerCorrect);
                 const qNegativePerWrong = isEssayQ ? 0.0 : (matchedSec.negativeMarks !== undefined ? matchedSec.negativeMarks : negativePerWrong);
+                const isAnswered = isEssayQ
+                    ? Boolean(ans.textAnswer && ans.textAnswer.trim().length > 0)
+                    : Boolean(ans.selectedOption !== null && ans.selectedOption !== undefined && ans.selectedOption !== '');
+                const formattedStatus = !isAnswered
+                    ? 'not-answered'
+                    : (ans.status ? ans.status.toLowerCase().replace(/_/g, '-') : 'answered');
+
                 return {
                     questionId: q.id,
                     questionNumber: idx + 1,
@@ -75,8 +82,9 @@ export class ResultController {
                     aiScore: ans.aiScore,
                     evaluationNotes: ans.evaluationNotes,
                     correctAnswer: isEssayQ ? 'Descriptive Response' : q.correctOption,
-                    isCorrect: ans.isCorrect,
-                    status: ans.status.toLowerCase().replace(/_/g, '-'),
+                    isCorrect: isAnswered ? Boolean(ans.isCorrect) : false,
+                    isAnswered,
+                    status: formattedStatus,
                     timeSpentSeconds: ans.timeSpentSeconds,
                     explanation: q.explanation,
                     difficulty: q.difficulty,

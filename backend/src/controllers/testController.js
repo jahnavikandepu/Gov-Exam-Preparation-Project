@@ -1782,7 +1782,9 @@ export class TestController {
                     topicBreakdown[q.topicId].skipped += 1;
                 }
 
-                const ansStatus = (selectedOption ? 'ANSWERED' : 'NOT_VISITED');
+                const ansStatus = selectedOption
+                    ? 'ANSWERED'
+                    : (ansRecord.status && ansRecord.status !== 'ANSWERED' ? ansRecord.status : 'NOT_ANSWERED');
                 await prisma.answer.update({
                     where: { id: ansRecord.id },
                     data: {

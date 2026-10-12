@@ -62,11 +62,26 @@ export const ResultsPage = () => {
     );
   }
 
+  const isQuestionAnswered = (q) => {
+    if (typeof q.isAnswered === 'boolean') {
+      return q.isAnswered;
+    }
+    const isEssay = q.isDescriptive || q.questionType === 'DESCRIPTIVE_ESSAY' || result?.isDescriptive;
+    if (isEssay) {
+      return Boolean(q.textAnswer && q.textAnswer.trim().length > 0);
+    }
+    if (q.isSkipped || q.status === 'skipped' || q.status === 'not-answered' || q.status === 'not-visited') {
+      return false;
+    }
+    return Boolean(q.userAnswer !== null && q.userAnswer !== undefined && q.userAnswer !== '');
+  };
+
   const questionReviews = result.questionAnalysis || result.questionReviews || [];
   const filteredQuestions = questionReviews.filter((q) => {
-    if (questionFilter === 'Correct') return q.isCorrect;
-    if (questionFilter === 'Wrong') return !q.isCorrect && q.status !== 'skipped';
-    if (questionFilter === 'Skipped') return q.status === 'skipped';
+    const answered = isQuestionAnswered(q);
+    if (questionFilter === 'Correct') return answered && q.isCorrect;
+    if (questionFilter === 'Wrong') return answered && !q.isCorrect;
+    if (questionFilter === 'Not Answered' || questionFilter === 'Skipped') return !answered;
     return true;
   });
 
@@ -194,7 +209,7 @@ export const ResultsPage = () => {
                   <XCircle className="h-3.5 w-3.5" /> {result.wrongQuestions || result.incorrectAnswers || 0} Wrong
                 </span>
                 <span className="text-slate-500 font-semibold flex items-center gap-1">
-                  <MinusCircle className="h-3.5 w-3.5" /> {result.skippedQuestions || 0} Skipped
+                  <MinusCircle className="h-3.5 w-3.5" /> {result.skippedQuestions || 0} Not Answered
                 </span>
               </div>
               <div className="h-2 w-full bg-slate-100 rounded-full flex overflow-hidden">
@@ -263,7 +278,7 @@ export const ResultsPage = () => {
           </div>
 
           <div className="flex items-center gap-1.5 bg-white border border-slate-200 p-1 rounded-xl shadow-xs">
-            {['All', 'Correct', 'Wrong', 'Skipped'].map((filter) => (
+            {['All', 'Correct', 'Wrong', 'Not Answered'].map((filter) => (
               <button
                 key={filter}
                 onClick={() => setQuestionFilter(filter)}
@@ -283,6 +298,7 @@ export const ResultsPage = () => {
         <div className="space-y-4">
           {filteredQuestions.map((q, index) => {
             const isEssayQ = q.isDescriptive || q.questionType === 'DESCRIPTIVE_ESSAY' || result.isDescriptive;
+            const answered = isQuestionAnswered(q);
             const wordCount = q.textAnswer ? q.textAnswer.trim().split(/\s+/).filter(Boolean).length : 0;
 
             return (
@@ -298,12 +314,24 @@ export const ResultsPage = () => {
                     </span>
                   </div>
                   <Badge
-                    variant={isEssayQ ? 'amber' : q.isCorrect ? 'emerald' : q.status === 'skipped' ? 'slate' : 'rose'}
+                    variant={
+                      !answered
+                        ? 'slate'
+                        : isEssayQ
+                        ? 'amber'
+                        : q.isCorrect
+                        ? 'emerald'
+                        : 'rose'
+                    }
                     size="sm"
                   >
-                    {isEssayQ 
+                    {!answered
+                      ? 'Not Answered'
+                      : isEssayQ 
                       ? `Descriptive Response (${q.marksPerCorrect || 12.5} Marks)` 
-                      : q.isCorrect ? `Correct (+${Number(q.marksPerCorrect || 1.0).toFixed(2)})` : q.status === 'skipped' ? 'Skipped (0.0)' : `Wrong (-${Number(q.negativePerWrong || 0.25).toFixed(2)})`}
+                      : q.isCorrect 
+                      ? `Correct (+${Number(q.marksPerCorrect || 1.0).toFixed(2)})` 
+                      : `Wrong (-${Number(q.negativePerWrong || 0.25).toFixed(2)})`}
                   </Badge>
                 </div>
 
